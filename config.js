@@ -6,7 +6,10 @@ const SURVEY_TITLE = "सोलर वॉटर पंप स्थिती स
 const SURVEY_SUBTITLE = "Murbad Taluka — Solar Water Pump Status Survey";
 
 // Paste your Google Apps Script deployment URL here after setup
-const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbzqJqnuoisTW_X7cZqbDrafYs1pc-w3t3DU8-iV1CnsK_POVB9L1Lc_ZvilV8MnwEOhJg/exec";
+const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbxfnjttzcFoVPxO-_so4aRP3yld3dgJp9EVOq7Tjp6Oa3eSTn8emrKaZn2JI92AwozUJQ/exec";
+
+// Name of the tab in Google Sheet — change this for each new survey
+const SHEET_TAB = "Murbad Solar Pump 2026";
 
 // ── School List ──────────────────────────────────────────────
 const SCHOOLS = [

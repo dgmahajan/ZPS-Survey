@@ -231,7 +231,7 @@ async function checkMatch() {
 
   // Check if already submitted
   try {
-    const res  = await fetch(SUBMIT_URL + '?udise=' + u);
+    const res  = await fetch(SUBMIT_URL + '?udise=' + u + '&tab=' + encodeURIComponent(SHEET_TAB));
     const data = await res.json();
     if (data.submitted) {
       alreadyDone.style.display = 'block';
@@ -349,6 +349,7 @@ document.getElementById('survey-form').addEventListener('submit', async (e) => {
     school_name: school.name,
     taluka: school.taluka,
     timestamp: new Date().toISOString(),
+    sheet_tab: SHEET_TAB,
     ...answers,
   };
 
