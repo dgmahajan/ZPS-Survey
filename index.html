@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>शाळा सर्वेक्षण</title>
+  <script src="config.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f4f0;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 560px;
+      margin: 0 auto;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+
+    .header {
+      background: #1a6b3a;
+      color: #fff;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .header h1 { font-size: 20px; margin-bottom: 4px; }
+    .header p  { font-size: 13px; opacity: 0.85; }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 6px;
+      margin-top: 18px;
+    }
+
+    select, input[type="number"], textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1.5px solid #ccc;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      background: #fafafa;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input[type="number"]:focus, textarea:focus {
+      outline: none;
+      border-color: #1a6b3a;
+      background: #fff;
+    }
+
+    textarea { height: 90px; resize: vertical; }
+
+    .error-msg {
+      color: #c0392b;
+      font-size: 13px;
+      margin-top: 6px;
+      display: none;
+    }
+
+    .yesno-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .yesno-btn {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      background: #fafafa;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+
+    .yesno-btn.yes.active  { background: #e8f5ee; border-color: #1a6b3a; color: #1a6b3a; }
+    .yesno-btn.no.active   { background: #fdecea; border-color: #c0392b; color: #c0392b; }
+    .yesno-btn.dk.active   { background: #fef9e7; border-color: #e67e22; color: #e67e22; }
+    .yesno-btn:hover       { opacity: 0.85; }
+
+    .subtext {
+      font-size: 12px;
+      color: #888;
+      margin-top: 3px;
+      margin-bottom: 4px;
+    }
+
+    .question-block {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #eee;
+    }
+
+    .question-block.hidden { display: none; }
+
+    .submit-btn {
+      width: 100%;
+      background: #1a6b3a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 15px;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 28px;
+      transition: opacity 0.2s;
+    }
+
+    .submit-btn:hover   { opacity: 0.9; }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .success-screen {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .success-icon { font-size: 64px; margin-bottom: 16px; }
+    .success-screen h2 { color: #1a6b3a; font-size: 22px; margin-bottom: 8px; }
+    .success-screen p  { color: #555; font-size: 15px; line-height: 1.6; }
+
+    .match-ok   { color: #1a6b3a; font-size: 13px; margin-top: 6px; display: none; }
+    .match-fail { color: #c0392b; font-size: 13px; margin-top: 6px; display: none; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="header">
+    <h1 id="survey-title"></h1>
+    <p  id="survey-subtitle"></p>
+  </div>
+
+  <!-- Form -->
+  <form id="survey-form">
+
+    <!-- School selection -->
+    <label>UDISE क्रमांक निवडा *</label>
+    <select id="sel-udise">
+      <option value="">-- UDISE क्रमांक निवडा --</option>
+    </select>
+
+    <label style="margin-top:14px;">शाळेचे नाव निवडा *</label>
+    <select id="sel-name">
+      <option value="">-- शाळेचे नाव निवडा --</option>
+    </select>
+
+    <div class="match-ok"   id="match-ok">✓ UDISE आणि शाळेचे नाव जुळते.</div>
+    <div class="match-fail" id="match-fail">✗ UDISE कोड आणि शाळेचे नाव जुळत नाही. कृपया पुन्हा निवडा.</div>
+    <div class="match-fail" id="already-done" style="display:none;background:#fef9e7;border-left:4px solid #e67e22;padding:12px;border-radius:6px;color:#7d4e00;">
+      ⚠️ तुमच्या शाळेने आधीच उत्तर दिले आहे. धन्यवाद!<br/>
+      <small>Your school has already submitted a response. Thank you!</small>
+    </div>
+
+    <!-- Questions injected here -->
+    <div id="questions-section" style="display:none;">
+      <div id="questions-container"></div>
+
+      <button type="submit" class="submit-btn" id="submit-btn">सादर करा (Submit)</button>
+    </div>
+
+  </form>
+
+  <!-- Success -->
+  <div class="success-screen" id="success-screen">
+    <div class="success-icon">✅</div>
+    <h2>धन्यवाद!</h2>
+    <p>तुमचा प्रतिसाद यशस्वीरित्या नोंदवला गेला.<br/>Thank you — your response has been recorded.</p>
+    <p style="margin-top:16px;font-size:13px;color:#888;" id="success-school"></p>
+  </div>
+
+</div>
+
+<script>
+// ── Init ──────────────────────────────────────────────────────
+document.getElementById('survey-title').textContent    = SURVEY_TITLE;
+document.getElementById('survey-subtitle').textContent = SURVEY_SUBTITLE;
+
+const selUdise = document.getElementById('sel-udise');
+const selName  = document.getElementById('sel-name');
+const matchOk   = document.getElementById('match-ok');
+const matchFail = document.getElementById('match-fail');
+const alreadyDone = document.getElementById('already-done');
+const qSection = document.getElementById('questions-section');
+const qContainer = document.getElementById('questions-container');
+
+// Sort schools by name for easy browsing
+const sorted = [...SCHOOLS].sort((a, b) => a.name.localeCompare(b.name, 'mr'));
+
+sorted.forEach(s => {
+  const o1 = document.createElement('option');
+  o1.value = s.udise; o1.textContent = s.udise; selUdise.appendChild(o1);
+
+  const o2 = document.createElement('option');
+  o2.value = s.udise; o2.textContent = s.name; selName.appendChild(o2);
+});
+
+// ── Match check ───────────────────────────────────────────────
+async function checkMatch() {
+  const u = selUdise.value;
+  const n = selName.value;
+  matchOk.style.display      = 'none';
+  matchFail.style.display    = 'none';
+  alreadyDone.style.display  = 'none';
+  qSection.style.display     = 'none';
+
+  if (!u || !n) return;
+
+  if (u !== n) {
+    matchFail.style.display = 'block';
+    return;
+  }
+
+  // Check if already submitted
+  try {
+    const res  = await fetch(SUBMIT_URL + '?udise=' + u);
+    const data = await res.json();
+    if (data.submitted) {
+      alreadyDone.style.display = 'block';
+      return;
+    }
+  } catch (err) {
+    // If check fails (network issue), allow form to proceed
+  }
+
+  matchOk.style.display  = 'block';
+  qSection.style.display = 'block';
+}
+
+selUdise.addEventListener('change', checkMatch);
+selName.addEventListener('change', checkMatch);
+
+// ── Build questions ───────────────────────────────────────────
+const answers = {};
+
+QUESTIONS.forEach(q => {
+  const block = document.createElement('div');
+  block.className = 'question-block' + (q.showIf ? ' hidden' : '');
+  block.id = 'block-' + q.id;
+
+  const lbl = document.createElement('label');
+  lbl.textContent = q.text;
+  block.appendChild(lbl);
+
+  if (q.subtext) {
+    const sub = document.createElement('div');
+    sub.className = 'subtext';
+    sub.textContent = q.subtext;
+    block.appendChild(sub);
+  }
+
+  if (q.type === 'yesno' || q.type === 'yesnodk') {
+    const row = document.createElement('div');
+    row.className = 'yesno-row';
+
+    const options = q.type === 'yesnodk'
+      ? [{ val: 'yes', label: 'होय (Yes)', cls: 'yes' }, { val: 'no', label: 'नाही (No)', cls: 'no' }, { val: 'dk', label: 'माहीत नाही (Don\'t Know)', cls: 'dk' }]
+      : [{ val: 'yes', label: 'होय (Yes)', cls: 'yes' }, { val: 'no', label: 'नाही (No)', cls: 'no' }];
+
+    options.forEach(({ val, label, cls }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'yesno-btn ' + cls;
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        row.querySelectorAll('.yesno-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        answers[q.id] = val;
+        updateConditionals();
+      });
+      row.appendChild(btn);
+    });
+    block.appendChild(row);
+
+  } else if (q.type === 'number') {
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.min  = q.min || 1;
+    inp.max  = q.max || 99;
+    inp.placeholder = `${q.min || 1} ते ${q.max || 99}`;
+    inp.addEventListener('input', () => { answers[q.id] = inp.value; });
+    block.appendChild(inp);
+
+  } else if (q.type === 'text') {
+    const ta = document.createElement('textarea');
+    ta.placeholder = 'येथे लिहा...';
+    ta.addEventListener('input', () => { answers[q.id] = ta.value; });
+    block.appendChild(ta);
+  }
+
+  qContainer.appendChild(block);
+});
+
+function updateConditionals() {
+  QUESTIONS.forEach(q => {
+    if (!q.showIf) return;
+    const block = document.getElementById('block-' + q.id);
+    if (answers[q.showIf.id] === q.showIf.value) {
+      block.classList.remove('hidden');
+    } else {
+      block.classList.add('hidden');
+      delete answers[q.id];
+    }
+  });
+}
+
+// ── Submit ────────────────────────────────────────────────────
+document.getElementById('survey-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const udise = selUdise.value;
+  if (!udise || selName.value !== udise) {
+    matchFail.style.display = 'block';
+    return;
+  }
+
+  // Validate required questions
+  for (const q of QUESTIONS) {
+    const block = document.getElementById('block-' + q.id);
+    if (block.classList.contains('hidden')) continue;
+    if (q.optional) continue;
+    if (!answers[q.id] && answers[q.id] !== 0) {
+      alert('कृपया सर्व प्रश्नांची उत्तरे द्या.\nPlease answer all required questions.');
+      return;
+    }
+  }
+
+  const school = SCHOOLS.find(s => s.udise === udise);
+  const payload = {
+    udise: school.udise,
+    school_name: school.name,
+    taluka: school.taluka,
+    timestamp: new Date().toISOString(),
+    ...answers,
+  };
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'सादर होत आहे...';
+
+  try {
+    await fetch(SUBMIT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    document.getElementById('survey-form').style.display = 'none';
+    document.getElementById('success-screen').style.display = 'block';
+    document.getElementById('success-school').textContent =
+      school.name + ' | UDISE: ' + school.udise;
+
+  } catch (err) {
+    alert('सादर करताना त्रुटी आली. इंटरनेट तपासा आणि पुन्हा प्रयत्न करा.\nSubmission failed. Check your internet and try again.');
+    btn.disabled = false;
+    btn.textContent = 'सादर करा (Submit)';
+  }
+});
+</script>
+</body>
+</html>
