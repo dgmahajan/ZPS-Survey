@@ -13,6 +13,7 @@ const SHEET_TAB = "Murbad Solar Pump 2026";
 
 // ── School List ──────────────────────────────────────────────
 const SCHOOLS = [
+  { udise: "TEST", name: "Test School (Admin Preview)", taluka: "Admin" },
   { udise: "27210900302", name: "जि.प.शाळा वाघिवलीपाडा", taluka: "Murbad" },
   { udise: "27210900701", name: "जि.प.शाळा वडू", taluka: "Murbad" },
   { udise: "27210901701", name: "जि.प.शाळा तिवारपाडा", taluka: "Murbad" },
