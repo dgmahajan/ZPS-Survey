@@ -1,0 +1,276 @@
+// ── Survey Application Logic ──────────────────────────────────
+
+window.SURVEYS = window.SURVEYS || [];
+let currentSurvey = null;
+let answers = {};
+
+// ── Load survey files dynamically ────────────────────────────
+async function loadSurveyFiles() {
+  for (const id of SURVEY_INDEX) {
+    await new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.src = `surveys/${id}.js?v=${Date.now()}`;
+      s.onload = resolve;
+      s.onerror = () => { console.warn('Could not load: ' + id); resolve(); };
+      document.head.appendChild(s);
+    });
+  }
+}
+
+// ── Date helpers ──────────────────────────────────────────────
+function today() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function isActive(survey) {
+  const t = today();
+  return t >= survey.start && t <= survey.end;
+}
+
+// ── Main init ─────────────────────────────────────────────────
+async function initApp() {
+  await loadSurveyFiles();
+  const active = (window.SURVEYS || []).filter(isActive);
+  if (active.length === 0) {
+    showNoSurveys();
+  } else if (active.length === 1) {
+    showSurvey(active[0]);
+  } else {
+    showSurveyList(active);
+  }
+}
+
+// ── Screen: No active surveys ─────────────────────────────────
+function showNoSurveys() {
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="header"><h1>शाळा सर्वेक्षण</h1><p>School Survey Portal</p></div>
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h2>सध्या कोणतेही सर्वेक्षण उपलब्ध नाही</h2>
+        <p>No active surveys at this time.<br/>Please check back later.</p>
+      </div>
+    </div>`;
+}
+
+// ── Screen: Survey list ───────────────────────────────────────
+function showSurveyList(surveys) {
+  window.SURVEYS_MAP = {};
+  surveys.forEach(s => window.SURVEYS_MAP[s.id] = s);
+  const items = surveys.map(s => `
+    <div class="survey-card" onclick="showSurvey(SURVEYS_MAP['${s.id}'])">
+      <div class="survey-card-name">${s.name}</div>
+      <div class="survey-card-sub">${s.subtitle || ''}</div>
+      <div class="survey-card-dates">📅 ${s.start} ते ${s.end}</div>
+    </div>`).join('');
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="header"><h1>शाळा सर्वेक्षण</h1><p>School Survey Portal</p></div>
+      <p class="section-title">सक्रिय सर्वेक्षण निवडा</p>
+      <p class="section-sub">Select a survey to answer</p>
+      ${items}
+    </div>`;
+}
+
+// ── Screen: Survey form ───────────────────────────────────────
+function showSurvey(survey) {
+  currentSurvey = survey;
+  answers = {};
+  const sorted = [...survey.schools].sort((a, b) => a.name.localeCompare(b.name, 'mr'));
+  const udiseOpts = sorted.map(s => `<option value="${s.udise}">${s.udise}</option>`).join('');
+  const nameOpts  = sorted.map(s => `<option value="${s.udise}">${s.name}</option>`).join('');
+
+  document.getElementById('app').innerHTML = `
+    <div class="card">
+      <div class="header"><h1>${survey.name}</h1><p>${survey.subtitle || ''}</p></div>
+      <form id="survey-form">
+        <label>UDISE क्रमांक निवडा *</label>
+        <select id="sel-udise"><option value="">-- UDISE क्रमांक निवडा --</option>${udiseOpts}</select>
+        <label style="margin-top:14px;">शाळेचे नाव निवडा *</label>
+        <select id="sel-name"><option value="">-- शाळेचे नाव निवडा --</option>${nameOpts}</select>
+        <div id="match-ok"    class="match-ok"    style="display:none;">✓ UDISE आणि शाळेचे नाव जुळते.</div>
+        <div id="match-fail"  class="match-fail"  style="display:none;">✗ UDISE कोड आणि शाळेचे नाव जुळत नाही. कृपया पुन्हा निवडा.</div>
+        <div id="prior-notice" class="prior-notice" style="display:none;">
+          ✏️ तुमच्या शाळेने आधीच उत्तर दिले आहे. तुम्ही खाली बदल करून पुन्हा सादर करू शकता.<br/>
+          <small>Your school already submitted. You can edit and resubmit below.</small>
+        </div>
+        <div id="questions-section" style="display:none;">
+          <label style="margin-top:20px;">मोबाइल नंबर *</label>
+          <div class="subtext">Mobile number (10 digits)</div>
+          <input type="tel" id="mobile-number" placeholder="10-अंकी मोबाइल नंबर" maxlength="10" />
+          <div id="questions-container"></div>
+          <button type="submit" class="submit-btn" id="submit-btn">सादर करा (Submit)</button>
+        </div>
+      </form>
+    </div>`;
+
+  document.getElementById('sel-udise').addEventListener('change', checkMatch);
+  document.getElementById('sel-name').addEventListener('change', checkMatch);
+  document.getElementById('survey-form').addEventListener('submit', submitSurvey);
+  buildQuestions(survey);
+}
+
+// ── Check UDISE + name match ──────────────────────────────────
+async function checkMatch() {
+  const u = document.getElementById('sel-udise').value;
+  const n = document.getElementById('sel-name').value;
+  document.getElementById('match-ok').style.display     = 'none';
+  document.getElementById('match-fail').style.display   = 'none';
+  document.getElementById('prior-notice').style.display = 'none';
+  document.getElementById('questions-section').style.display = 'none';
+  if (!u || !n) return;
+  if (u !== n) { document.getElementById('match-fail').style.display = 'block'; return; }
+
+  // Check for prior submission and load previous answers
+  try {
+    const res  = await fetch(SUBMIT_URL + '?udise=' + u + '&tab=' + encodeURIComponent(currentSurvey.sheet_tab));
+    const data = await res.json();
+    if (data.submitted && data.prior) {
+      document.getElementById('prior-notice').style.display = 'block';
+      if (data.prior.mobile) document.getElementById('mobile-number').value = data.prior.mobile;
+      prefillAnswers(data.prior);
+    }
+  } catch (err) { /* allow on network error */ }
+
+  document.getElementById('match-ok').style.display = 'block';
+  document.getElementById('questions-section').style.display = 'block';
+}
+
+// ── Build questions ───────────────────────────────────────────
+function buildQuestions(survey) {
+  answers = {};
+  const container = document.getElementById('questions-container');
+  container.innerHTML = '';
+  survey.questions.forEach(q => {
+    const block = document.createElement('div');
+    block.className = 'question-block' + (q.showIf ? ' hidden' : '');
+    block.id = 'block-' + q.id;
+    const lbl = document.createElement('label');
+    lbl.textContent = q.text;
+    block.appendChild(lbl);
+    if (q.subtext) {
+      const sub = document.createElement('div');
+      sub.className = 'subtext';
+      sub.textContent = q.subtext;
+      block.appendChild(sub);
+    }
+    if (q.type === 'yesno' || q.type === 'yesnodk') {
+      const row = document.createElement('div');
+      row.className = 'yesno-row';
+      row.id = 'row-' + q.id;
+      const opts = q.type === 'yesnodk'
+        ? [{val:'yes',label:'होय (Yes)',cls:'yes'},{val:'no',label:'नाही (No)',cls:'no'},{val:'dk',label:"माहीत नाही (Don't Know)",cls:'dk'}]
+        : [{val:'yes',label:'होय (Yes)',cls:'yes'},{val:'no',label:'नाही (No)',cls:'no'}];
+      opts.forEach(({val, label, cls}) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'yesno-btn ' + cls;
+        btn.textContent = label;
+        btn.dataset.val = val;
+        btn.addEventListener('click', () => {
+          row.querySelectorAll('.yesno-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          answers[q.id] = val;
+          updateConditionals();
+        });
+        row.appendChild(btn);
+      });
+      block.appendChild(row);
+    } else if (q.type === 'number') {
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.id = 'inp-' + q.id;
+      inp.min = q.min || 1; inp.max = q.max || 99;
+      inp.placeholder = `${q.min || 1} ते ${q.max || 99}`;
+      inp.addEventListener('input', () => { answers[q.id] = inp.value; });
+      block.appendChild(inp);
+    } else if (q.type === 'text') {
+      const ta = document.createElement('textarea');
+      ta.id = 'inp-' + q.id;
+      ta.placeholder = 'येथे लिहा...';
+      ta.addEventListener('input', () => { answers[q.id] = ta.value; });
+      block.appendChild(ta);
+    }
+    container.appendChild(block);
+  });
+}
+
+// ── Pre-fill from prior submission ────────────────────────────
+function prefillAnswers(prior) {
+  if (!currentSurvey) return;
+  currentSurvey.questions.forEach(q => {
+    const val = prior[q.id];
+    if (!val) return;
+    answers[q.id] = val;
+    if (q.type === 'yesno' || q.type === 'yesnodk') {
+      const row = document.getElementById('row-' + q.id);
+      if (row) row.querySelectorAll('.yesno-btn').forEach(btn => {
+        if (btn.dataset.val === val) btn.classList.add('active');
+      });
+    } else {
+      const inp = document.getElementById('inp-' + q.id);
+      if (inp) inp.value = val;
+    }
+  });
+  updateConditionals();
+}
+
+// ── Show/hide conditional questions ──────────────────────────
+function updateConditionals() {
+  if (!currentSurvey) return;
+  currentSurvey.questions.forEach(q => {
+    if (!q.showIf) return;
+    const block = document.getElementById('block-' + q.id);
+    if (!block) return;
+    if (answers[q.showIf.id] === q.showIf.value) {
+      block.classList.remove('hidden');
+    } else {
+      block.classList.add('hidden');
+      delete answers[q.id];
+    }
+  });
+}
+
+// ── Submit ────────────────────────────────────────────────────
+async function submitSurvey(e) {
+  e.preventDefault();
+  const udise  = document.getElementById('sel-udise').value;
+  const mobile = document.getElementById('mobile-number').value.trim();
+  if (!udise || document.getElementById('sel-name').value !== udise) {
+    document.getElementById('match-fail').style.display = 'block'; return;
+  }
+  if (!/^[0-9]{10}$/.test(mobile)) {
+    alert('कृपया 10-अंकी मोबाइल नंबर टाका.\nPlease enter a valid 10-digit mobile number.'); return;
+  }
+  for (const q of currentSurvey.questions) {
+    const block = document.getElementById('block-' + q.id);
+    if (!block || block.classList.contains('hidden') || q.optional) continue;
+    if (!answers[q.id] && answers[q.id] !== 0) {
+      alert('कृपया सर्व प्रश्नांची उत्तरे द्या.\nPlease answer all required questions.'); return;
+    }
+  }
+  const school = currentSurvey.schools.find(s => s.udise === udise);
+  const payload = {
+    udise: school.udise, school_name: school.name, taluka: school.taluka,
+    mobile, timestamp: new Date().toISOString(), sheet_tab: currentSurvey.sheet_tab, ...answers,
+  };
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'सादर होत आहे...';
+  try {
+    await fetch(SUBMIT_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    document.getElementById('app').innerHTML = `
+      <div class="card">
+        <div class="success-screen">
+          <div class="success-icon">✅</div>
+          <h2>धन्यवाद!</h2>
+          <p>तुमचा प्रतिसाद यशस्वीरित्या नोंदवला गेला.<br/>Thank you — your response has been recorded.</p>
+          <p class="success-school">${school.name}<br/><small>UDISE: ${school.udise}</small></p>
+        </div>
+      </div>`;
+  } catch (err) {
+    alert('सादर करताना त्रुटी आली. इंटरनेट तपासा आणि पुन्हा प्रयत्न करा.\nSubmission failed. Check your internet and try again.');
+    btn.disabled = false; btn.textContent = 'सादर करा (Submit)';
+  }
+}
+
+// ── Start ─────────────────────────────────────────────────────
+initApp();
