@@ -154,6 +154,16 @@ function buildQuestions(survey) {
       sub.textContent = q.subtext;
       block.appendChild(sub);
     }
+    if (q.image) {
+      const imgSrc = `surveys/${survey.id}/${q.image}`;
+      const wrap = document.createElement('div');
+      wrap.className = 'q-image-wrap';
+      wrap.innerHTML = `
+        <img class="q-thumb" src="${imgSrc}" alt="प्रश्नाशी संबंधित चित्र"
+             onclick="openLightbox('${imgSrc}')" />
+        <div class="q-thumb-hint">👆 चित्र मोठे पाहण्यासाठी स्पर्श करा / Tap to enlarge</div>`;
+      block.appendChild(wrap);
+    }
     if (q.type === 'yesno' || q.type === 'yesnodk') {
       const row = document.createElement('div');
       row.className = 'yesno-row';
@@ -189,6 +199,65 @@ function buildQuestions(survey) {
       ta.placeholder = 'येथे लिहा...';
       ta.addEventListener('input', () => { answers[q.id] = ta.value; });
       block.appendChild(ta);
+    } else if (q.type === 'photo') {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.capture = 'environment';
+      fileInput.id = 'inp-' + q.id;
+      fileInput.style.display = 'none';
+
+      const uploadBtn = document.createElement('button');
+      uploadBtn.type = 'button';
+      uploadBtn.className = 'photo-upload-btn';
+      uploadBtn.innerHTML = `<span class="icon">📷</span><span>फोटो काढा / Upload Photo</span>`;
+      uploadBtn.addEventListener('click', () => fileInput.click());
+
+      const note = document.createElement('div');
+      note.className = 'photo-optional-note';
+      note.textContent = '(ऐच्छिक — Optional)';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'photo-preview-wrap';
+      previewWrap.style.display = 'none';
+
+      const previewImg = document.createElement('img');
+      previewImg.className = 'photo-preview';
+      previewImg.addEventListener('click', () => openLightbox(previewImg.src));
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'photo-remove';
+      removeBtn.textContent = '✕';
+      removeBtn.addEventListener('click', () => {
+        delete answers[q.id];
+        fileInput.value = '';
+        previewImg.src = '';
+        previewWrap.style.display = 'none';
+        uploadBtn.style.display = 'flex';
+      });
+
+      previewWrap.appendChild(previewImg);
+      previewWrap.appendChild(removeBtn);
+
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        uploadBtn.innerHTML = `<span class="icon">⏳</span><span>Compressing…</span>`;
+        uploadBtn.disabled = true;
+        const compressed = await compressImage(file);
+        answers[q.id] = compressed;
+        previewImg.src = compressed;
+        previewWrap.style.display = 'inline-block';
+        uploadBtn.style.display = 'none';
+        uploadBtn.innerHTML = `<span class="icon">📷</span><span>फोटो काढा / Upload Photo</span>`;
+        uploadBtn.disabled = false;
+      });
+
+      block.appendChild(fileInput);
+      block.appendChild(uploadBtn);
+      block.appendChild(previewWrap);
+      block.appendChild(note);
     }
     container.appendChild(block);
   });
@@ -243,7 +312,7 @@ async function submitSurvey(e) {
   }
   for (const q of currentSurvey.questions) {
     const block = document.getElementById('block-' + q.id);
-    if (!block || block.classList.contains('hidden') || q.optional) continue;
+    if (!block || block.classList.contains('hidden') || q.optional || q.type === 'photo') continue;
     if (!answers[q.id] && answers[q.id] !== 0) {
       alert('कृपया सर्व प्रश्नांची उत्तरे द्या.\nPlease answer all required questions.'); return;
     }
@@ -271,6 +340,41 @@ async function submitSurvey(e) {
     btn.disabled = false; btn.textContent = 'सादर करा (Submit)';
   }
 }
+
+// ── Image compression ─────────────────────────────────────────
+function compressImage(file, maxWidth = 1024, quality = 0.72) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Lightbox ──────────────────────────────────────────────────
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.getElementById('lightbox-img').src = '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
 
 // ── Start ─────────────────────────────────────────────────────
 initApp();
