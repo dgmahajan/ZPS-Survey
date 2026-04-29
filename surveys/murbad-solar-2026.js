@@ -75,12 +75,5 @@ window.SURVEYS.push({
       optional: true,
       showIf:   { id: "q0", value: "yes" },
     },
-    {
-      id:      "q5",
-      text:    "सोलर पंप / पॅनेलचा फोटो काढा",
-      subtext: "Take a photo of the solar pump or panels (optional)",
-      type:    "photo",
-      showIf:  { id: "q0", value: "yes" },
-    },
   ],
 });
