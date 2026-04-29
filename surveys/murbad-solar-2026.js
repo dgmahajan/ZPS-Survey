@@ -43,7 +43,6 @@ window.SURVEYS.push({
       text:    "तुमच्या शाळेत पाणीपुरवठ्यासाठी सोलर पंप आहे का?",
       subtext: "Does your school have a solar pump for water supply?",
       type:    "yesnodk",
-      image:   "solar-pump.jpg",       // place image at: surveys/murbad-solar-2026/solar-pump.jpg
     },
     {
       id:      "q1",
@@ -51,7 +50,6 @@ window.SURVEYS.push({
       subtext: "When the borewell has sufficient water, does the solar pump work?",
       type:    "yesno",
       showIf:  { id: "q0", value: "yes" },
-      image:   "solar-pump-working.jpg", // place image at: surveys/murbad-solar-2026/solar-pump-working.jpg
     },
     {
       id:      "q2",
@@ -59,7 +57,6 @@ window.SURVEYS.push({
       subtext: "Are any solar panels damaged or broken?",
       type:    "yesno",
       showIf:  { id: "q0", value: "yes" },
-      image:   "damaged-panel.jpg",    // place image at: surveys/murbad-solar-2026/damaged-panel.jpg
     },
     {
       id:      "q3",
