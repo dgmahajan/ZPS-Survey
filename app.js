@@ -121,18 +121,21 @@ async function checkMatch() {
   if (!u || !n) return;
   if (u !== n) { document.getElementById('match-fail').style.display = 'block'; return; }
 
-  // Check for prior submission and load previous answers
+  // Fetch prior data silently, then reveal everything at once
+  let hasPrior = false;
   try {
     const res  = await fetch(SUBMIT_URL + '?udise=' + u + '&tab=' + encodeURIComponent(currentSurvey.sheet_tab));
     const data = await res.json();
     if (data.submitted && data.prior) {
-      document.getElementById('prior-notice').style.display = 'block';
+      hasPrior = true;
       if (data.prior.mobile) document.getElementById('mobile-number').value = data.prior.mobile;
       prefillAnswers(data.prior);
     }
   } catch (err) { /* allow on network error */ }
 
-  document.getElementById('match-ok').style.display = 'block';
+  // Reveal form only now — fully populated, all at once
+  document.getElementById('match-ok').style.display    = 'block';
+  if (hasPrior) document.getElementById('prior-notice').style.display = 'block';
   document.getElementById('questions-section').style.display = 'block';
 }
 
@@ -262,14 +265,27 @@ function buildQuestions(survey) {
 function prefillAnswers(prior) {
   if (!currentSurvey) return;
   currentSurvey.questions.forEach(q => {
-    const val = prior[q.id];
-    if (!val) return;
+    const raw = prior[q.id];
+    if (raw === undefined || raw === null || raw === '') return;
+    const val = String(raw).trim();
     answers[q.id] = val;
     if (q.type === 'yesno' || q.type === 'yesnodk') {
       const row = document.getElementById('row-' + q.id);
       if (row) row.querySelectorAll('.yesno-btn').forEach(btn => {
         if (btn.dataset.val === val) btn.classList.add('active');
       });
+    } else if (q.type === 'photo') {
+      const block = document.getElementById('block-' + q.id);
+      if (block && val.startsWith('http')) {
+        const div = document.createElement('div');
+        div.className = 'prior-photo-notice';
+        div.innerHTML = `📷 <strong>आधीचा फोटो सादर आहे.</strong><br/>
+          <a href="${val}" target="_blank">पाहण्यासाठी येथे क्लिक करा / Click to view submitted photo</a><br/>
+          <small>नवीन फोटो अपलोड केल्यास तो बदलेल / Upload a new photo to replace it</small>`;
+        const uploadLabel = block.querySelector('.photo-upload-btn');
+        if (uploadLabel) block.insertBefore(div, uploadLabel);
+        else block.appendChild(div);
+      }
     } else {
       const inp = document.getElementById('inp-' + q.id);
       if (inp) inp.value = val;
@@ -321,6 +337,21 @@ async function submitSurvey(e) {
   btn.disabled = true; btn.textContent = 'सादर होत आहे...';
   try {
     await fetch(SUBMIT_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+
+    // Verify the record actually landed in the sheet
+    btn.textContent = 'तपासत आहे... / Verifying...';
+    let verified = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const check = await fetch(SUBMIT_URL + '?udise=' + encodeURIComponent(udise) + '&tab=' + encodeURIComponent(currentSurvey.sheet_tab));
+        const result = await check.json();
+        if (result.submitted) { verified = true; break; }
+      } catch(_) { /* retry */ }
+    }
+
+    if (!verified) throw new Error('नोंद सापडली नाही / Record not confirmed in sheet after submission.');
+
     document.getElementById('app').innerHTML = `
       <div class="card">
         <div class="success-screen">
@@ -331,7 +362,7 @@ async function submitSurvey(e) {
         </div>
       </div>`;
   } catch (err) {
-    alert('सादर करताना त्रुटी आली. इंटरनेट तपासा आणि पुन्हा प्रयत्न करा.\nSubmission failed. Check your internet and try again.');
+    alert('सादर करताना त्रुटी आली — तुमचा डेटा सेव्ह झाला नाही. इंटरनेट तपासा आणि पुन्हा प्रयत्न करा.\nSubmission failed — your data was NOT saved. Check your internet and try again.');
     btn.disabled = false; btn.textContent = 'सादर करा (Submit)';
   }
 }
